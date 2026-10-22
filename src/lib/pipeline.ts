@@ -388,5 +388,12 @@ export async function state() {
     q(`SELECT a.auth_id, a.cpt, a.icd10, a.provider_name, a.note, m.full_name FROM auth_requests a LEFT JOIN members m USING (member_key) ORDER BY a.auth_id`),
     q(`SELECT auth_id, outcome, summary, audit FROM auth_decisions ORDER BY auth_id`),
   ]).catch(() => [[], [], [], [], [], [], []] as Json[][]);
-  return { runs, issues, members, links, providers, requests, decisions, policy: POLICY };
+  const entries = FHIR_BUNDLE.entry as Json[];
+  const pick = (type: string, id: string) => entries.find((e) => e.resource.resourceType === type && e.resource.id === id)?.resource;
+  const sources = {
+    fhir: JSON.stringify([pick("Patient", "pat-1"), pick("Practitioner", "prac-3"), pick("ServiceRequest", "AUTH-1001")], null, 2),
+    hl7: HL7_MESSAGES.map((m) => m.replace(/\r/g, "\n")).join("\n\n"),
+    csv: CLAIMS_CSV,
+  };
+  return { runs, issues, members, links, providers, requests, decisions, policy: POLICY, sources };
 }
