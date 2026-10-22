@@ -24,7 +24,7 @@ const PHASES = [
   { name: "Discovery and KPI baseline", w: 3, owner: "FDE + customer sponsor", outcome: "Signed-off success metrics and a measured baseline" },
   { name: "Data connect and validate", w: 5, owner: "FDE + customer IT", outcome: "Clean, de-duplicated member, provider and claims data" },
   { name: "Policy load and configuration", w: 4, owner: "FDE + clinical lead", outcome: "Policies mapped to checkable criteria" },
-  { name: "Shadow run", w: 4, owner: "FDE + reviewers", outcome: "Decisions compared with human reviewers, gaps closed" },
+  { name: "Test run", w: 4, owner: "FDE + reviewers", outcome: "Decisions compared with human reviewers, gaps closed" },
   { name: "Go-live and enablement", w: 2, owner: "FDE + operations", outcome: "Users trained, workflow switched on" },
   { name: "Hypercare and value review", w: 2, owner: "FDE + sponsor", outcome: "Measured results and the next use case" },
 ];
@@ -91,7 +91,7 @@ export function generatePlan(cfg: PlanConfig): Plan {
   if (cfg.source === "fhir") risks.push({ risk: "Provider records with missing or invalid NPIs block automation", mitigation: "Validate NPIs on day one and enrich from a provider directory" });
   if (cfg.source === "snowflake") risks.push({ risk: "Schema drift in the shared tables", mitigation: "Contract tests on the shared views, alert on change" });
   risks.push({ risk: "Clinical reviewer availability for policy sign-off", mitigation: "Book two review sessions per week into the plan now" });
-  if (cfg.weeks < 8) risks.push({ risk: `Compressed ${cfg.weeks}-week timeline leaves a ${phases[3].weeks}-week shadow run`, mitigation: "Limit launch scope to the top policies and expand after go-live" });
+  if (cfg.weeks < 8) risks.push({ risk: `Compressed ${cfg.weeks}-week timeline leaves a ${phases[3].weeks}-week test run`, mitigation: "Limit launch scope to the top policies and expand after go-live" });
   if (cfg.weeks > 10) risks.push({ risk: "Longer timelines lose sponsor attention", mitigation: "Hold a value checkpoint at the midpoint" });
 
   return { phases, checklist: CHECKLIST[cfg.source], risks, kpis: KPIS[cfg.useCase], policyWork: POLICY[cfg.useCase] };
