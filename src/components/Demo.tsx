@@ -9,7 +9,7 @@ import { notifications } from "@mantine/notifications";
 import { PlanTab } from "@/components/PlanTab";
 import { ValueTab } from "@/components/ValueTab";
 import {
-  IconAlertTriangle, IconCheck, IconDatabase, IconFileImport, IconGitMerge, IconPlayerPlay, IconRefresh,
+  IconAlertTriangle, IconArrowRight, IconCheck, IconDatabase, IconFileImport, IconGitMerge, IconPlayerPlay, IconRefresh,
   IconChartLine, IconListCheck, IconShieldCheck, IconStethoscope, IconX, IconHelp, IconUserCheck,
 } from "@tabler/icons-react";
 
@@ -47,6 +47,7 @@ export function Demo() {
   const [busy, setBusy] = useState<string | null>(null);
   const [tab, setTab] = useState<string | null>("plan");
   const [engine, setEngine] = useState<string>("rules");
+  const go = (t: string) => { setTab(t); window.scrollTo({ top: 0, behavior: "smooth" }); };
 
   const refresh = useCallback(async () => {
     setState(await (await fetch("/api/state", { cache: "no-store" })).json());
@@ -133,17 +134,17 @@ export function Demo() {
                 <Tabs.Tab value="validate" leftSection={<IconShieldCheck size={16} />}>2 · Validate</Tabs.Tab>
                 <Tabs.Tab value="resolve" leftSection={<IconGitMerge size={16} />}>3 · Resolve</Tabs.Tab>
                 <Tabs.Tab value="auth" leftSection={<IconStethoscope size={16} />}>4 · Prior auth</Tabs.Tab>
-                <Tabs.Tab value="value" leftSection={<IconChartLine size={16} />}>5 · Value review</Tabs.Tab>
-                <Tabs.Tab value="sql" leftSection={<IconDatabase size={16} />}>SQL</Tabs.Tab>
+                <Tabs.Tab value="sql" leftSection={<IconDatabase size={16} />}>5 · SQL</Tabs.Tab>
+                <Tabs.Tab value="value" leftSection={<IconChartLine size={16} />}>6 · Value review</Tabs.Tab>
               </Tabs.List>
 
-              <Tabs.Panel value="plan" pt="md"><PlanTab goToProof={() => setTab("sources")} /></Tabs.Panel>
+              <Tabs.Panel value="plan" pt="md"><PlanTab goToProof={() => go("sources")} /></Tabs.Panel>
               <Tabs.Panel value="sources" pt="md"><Sources state={state} ran={ran} busy={busy} run={run} /></Tabs.Panel>
               <Tabs.Panel value="validate" pt="md"><Validate state={state} ran={ran} busy={busy} run={run} /></Tabs.Panel>
               <Tabs.Panel value="resolve" pt="md"><Resolve state={state} ran={ran} busy={busy} run={run} /></Tabs.Panel>
               <Tabs.Panel value="auth" pt="md"><Auth state={state} ran={ran} busy={busy} run={run} engine={engine} setEngine={setEngine} /></Tabs.Panel>
-              <Tabs.Panel value="value" pt="md"><ValueTab /></Tabs.Panel>
-              <Tabs.Panel value="sql" pt="md"><Sql ready={ran.has("resolve")} /></Tabs.Panel>
+              <Tabs.Panel value="value" pt="md"><ValueTab onRestart={() => go("plan")} /></Tabs.Panel>
+              <Tabs.Panel value="sql" pt="md"><Sql ready={ran.has("resolve")} onNext={() => go("value")} /></Tabs.Panel>
             </Tabs>
           </Stack>
         )}
@@ -363,7 +364,7 @@ function Auth({ state, ran, busy, run, engine, setEngine }: PanelProps & { engin
   );
 }
 
-function Sql({ ready }: { ready: boolean }) {
+function Sql({ ready, onNext }: { ready: boolean; onNext: () => void }) {
   const [queries, setQueries] = useState<{ id: string; label: string }[]>([]);
   const [result, setResult] = useState<{ label: string; sql: string; rows: Row[] } | null>(null);
   useEffect(() => { fetch("/api/query").then((r) => r.json()).then(setQueries); }, []);
@@ -390,6 +391,9 @@ function Sql({ ready }: { ready: boolean }) {
           )}
         </>
       )}
+      <Group justify="flex-end" mt="md">
+        <Button rightSection={<IconArrowRight size={16} />} onClick={onNext}>Next: Value review (Module 3)</Button>
+      </Group>
     </Section>
   );
 }

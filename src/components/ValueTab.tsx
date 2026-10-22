@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Alert, Badge, Box, Button, Card, Group, Loader, SimpleGrid, Stack, Table, Text, Textarea, ThemeIcon, Title } from "@mantine/core";
 import { BarChart, LineChart } from "@mantine/charts";
-import { IconAlertTriangle, IconArrowUpRight, IconCheck, IconSparkles, IconTrash } from "@tabler/icons-react";
+import { IconAlertTriangle, IconArrowUpRight, IconCheck, IconRefresh, IconSparkles, IconTrash } from "@tabler/icons-react";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type V = {
@@ -33,7 +33,7 @@ function Tile({ label, value, sub, accent }: { label: string; value: string; sub
   );
 }
 
-export function ValueTab() {
+export function ValueTab({ onRestart }: { onRestart: () => void }) {
   const [v, setV] = useState<V | null>(null);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
@@ -159,6 +159,9 @@ export function ValueTab() {
           ))}
         </Stack>
       </Card>
+      <Group justify="flex-end">
+        <Button variant="default" leftSection={<IconRefresh size={16} />} onClick={onRestart}>Back to the start: Onboarding plan</Button>
+      </Group>
     </Stack>
   );
 }

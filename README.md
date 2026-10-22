@@ -15,8 +15,8 @@ Everything is synthetic. "Northwind Health Plan" is a fictional payer, and all m
 | **2 Validate** | NPI check-digit (Luhn), ICD-10 format, CPT and diagnosis consistency, orphaned members, missing member IDs. "Apply directory fix" repairs provider NPIs and re-decides. |
 | **3 Resolve** | Entity resolution across sources: nicknames, punctuation, missing IDs. Same name with a different DOB stays separate. Match scores and rationale are shown. |
 | **4 Prior auth** | Policy `NHP-IMG-014` (lumbar MRI) has four criteria. A clean pass auto-approves, otherwise it goes to a human or back to the provider, with a per-criterion audit trail. Engine toggle: deterministic rules or an open-weight model. |
-| **5 Value review** | Month-three view over 12 synthetic weeks: baseline vs now, trend charts with milestones, reviewer overrides, expansion and renewal-risk signals, and customer feedback turned into a structured product request. |
-| **SQL** | Allow-listed queries against the Neon tables. |
+| **5 SQL** | Allow-listed queries against the Neon tables. |
+| **6 Value review** | Month-three view over 12 synthetic weeks: baseline vs now, trend charts with milestones, reviewer overrides, expansion and renewal-risk signals, and customer feedback turned into a structured product request. |
 
 ## How the model step works
 Gemma 4 (`gemma-4-26b-a4b-it`, open weights) via the Google AI Studio API is used in three places: reading clinical notes against two policy criteria, drafting the kickoff summary, and structuring customer feedback.
