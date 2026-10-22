@@ -26,7 +26,7 @@ const asStatus = (s: string): NoteStatus => (s === "missing" ? "ambiguous" : (s 
 type Row = { id: string; c1?: NoteStatus; c2?: NoteStatus; failed?: string; ms: number };
 const results: Record<string, Row[]> = { rules: CASES.map((c) => ({ id: c.id, c1: asStatus(evalC1(c.note).status), c2: asStatus(evalC2(c.note).status), ms: 0 })) };
 
-for (const id of ["gemma", "mistral"] as ProviderId[]) {
+for (const id of (process.env.ENGINES ?? "gemma,gemma31,mistral").split(",") as ProviderId[]) {
   if (!PROVIDERS[id].key) { console.log(`skip ${id}: no API key`); continue; }
   results[id] = [];
   for (const c of CASES) {

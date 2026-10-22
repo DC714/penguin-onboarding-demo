@@ -5,7 +5,7 @@
  */
 export type NoteStatus = "met" | "not_met" | "ambiguous";
 export type NoteAssessment = { c1: { status: NoteStatus; quote: string }; c2: { status: NoteStatus; quote: string } };
-export type ProviderId = "gemma" | "mistral";
+export type ProviderId = "gemma" | "gemma31" | "mistral";
 export type Attempt = { result: NoteAssessment | null; error?: string; ms: number };
 
 type Provider = { id: ProviderId; label: string; model: string; key: string | undefined; call: (prompt: string, model: string, key: string) => Promise<string> };
@@ -20,7 +20,7 @@ const gemmaCall: Provider["call"] = async (prompt, model, key) => {
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}: ${(await res.text()).slice(0, 160)}`);
   const data = await res.json();
-  return data?.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text ?? "").join("") ?? "";
+  return data?.candidates?.[0]?.content?.parts?.filter((p: { thought?: boolean }) => !p.thought).map((p: { text?: string }) => p.text ?? "").join("") ?? "";
 };
 
 const mistralCall: Provider["call"] = async (prompt, model, key) => {
@@ -34,8 +34,38 @@ const mistralCall: Provider["call"] = async (prompt, model, key) => {
   return (await res.json())?.choices?.[0]?.message?.content ?? "";
 };
 
+/** Retry transient 5xx/429 responses with backoff; everything else is final. */
+async function withRetry(fn: () => Promise<string>, tries = 3): Promise<string> {
+  let last: unknown;
+  for (let i = 0; i < tries; i++) {
+    try {
+      return await fn();
+    } catch (e) {
+      last = e;
+      if (!/HTTP (5\d\d|429)/.test(String(e))) break;
+      await new Promise((r) => setTimeout(r, 1500 * (i + 1)));
+    }
+  }
+  throw last;
+}
+
+/** First balanced {...} object in a string (models sometimes add prose or a second object). */
+function firstJsonObject(text: string): string {
+  const start = text.indexOf("{");
+  let depth = 0, inStr = false, esc = false;
+  for (let i = start; i >= 0 && i < text.length; i++) {
+    const c = text[i];
+    if (inStr) { if (esc) esc = false; else if (c === "\\") esc = true; else if (c === '"') inStr = false; continue; }
+    if (c === '"') inStr = true;
+    else if (c === "{") depth++;
+    else if (c === "}" && --depth === 0) return text.slice(start, i + 1);
+  }
+  return "";
+}
+
 export const PROVIDERS: Record<ProviderId, Provider> = {
-  gemma: { id: "gemma", label: "Gemma", model: process.env.GEMMA_MODEL ?? "gemma-3-27b-it", key: process.env.GEMMA_API_KEY, call: gemmaCall },
+  gemma: { id: "gemma", label: "Gemma 26B", model: process.env.GEMMA_MODEL ?? "gemma-4-26b-a4b-it", key: process.env.GEMMA_API_KEY, call: gemmaCall },
+  gemma31: { id: "gemma31", label: "Gemma 31B", model: process.env.GEMMA31_MODEL ?? "gemma-4-31b-it", key: process.env.GEMMA_API_KEY, call: gemmaCall },
   mistral: { id: "mistral", label: "Mistral", model: process.env.MISTRAL_MODEL ?? "mistral-small-latest", key: process.env.MISTRAL_API_KEY, call: mistralCall },
 };
 
@@ -65,8 +95,8 @@ export async function tryAssess(note: string, id: ProviderId): Promise<Attempt> 
   const t0 = Date.now();
   if (!p.key || !note) return { result: null, error: "no key or empty note", ms: 0 };
   try {
-    const text = await p.call(PROMPT(note), p.model, p.key);
-    const json = JSON.parse(text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1));
+    const text = await withRetry(() => p.call(PROMPT(note), p.model, p.key!));
+    const json = JSON.parse(firstJsonObject(text));
     const out = {} as NoteAssessment;
     for (const k of ["c1", "c2"] as const) {
       const { status, quote } = json[k] ?? {};
