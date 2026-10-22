@@ -7,9 +7,10 @@ import {
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { PlanTab } from "@/components/PlanTab";
+import { ValueTab } from "@/components/ValueTab";
 import {
   IconAlertTriangle, IconCheck, IconDatabase, IconFileImport, IconGitMerge, IconPlayerPlay, IconRefresh,
-  IconListCheck, IconShieldCheck, IconStethoscope, IconX, IconHelp, IconUserCheck,
+  IconChartLine, IconListCheck, IconShieldCheck, IconStethoscope, IconX, IconHelp, IconUserCheck,
 } from "@tabler/icons-react";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -132,6 +133,7 @@ export function Demo() {
                 <Tabs.Tab value="validate" leftSection={<IconShieldCheck size={16} />}>2 · Validate</Tabs.Tab>
                 <Tabs.Tab value="resolve" leftSection={<IconGitMerge size={16} />}>3 · Resolve</Tabs.Tab>
                 <Tabs.Tab value="auth" leftSection={<IconStethoscope size={16} />}>4 · Prior auth</Tabs.Tab>
+                <Tabs.Tab value="value" leftSection={<IconChartLine size={16} />}>5 · Value review</Tabs.Tab>
                 <Tabs.Tab value="sql" leftSection={<IconDatabase size={16} />}>SQL</Tabs.Tab>
               </Tabs.List>
 
@@ -140,6 +142,7 @@ export function Demo() {
               <Tabs.Panel value="validate" pt="md"><Validate state={state} ran={ran} busy={busy} run={run} /></Tabs.Panel>
               <Tabs.Panel value="resolve" pt="md"><Resolve state={state} ran={ran} busy={busy} run={run} /></Tabs.Panel>
               <Tabs.Panel value="auth" pt="md"><Auth state={state} ran={ran} busy={busy} run={run} engine={engine} setEngine={setEngine} /></Tabs.Panel>
+              <Tabs.Panel value="value" pt="md"><ValueTab /></Tabs.Panel>
               <Tabs.Panel value="sql" pt="md"><Sql ready={ran.has("resolve")} /></Tabs.Panel>
             </Tabs>
           </Stack>

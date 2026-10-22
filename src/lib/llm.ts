@@ -50,7 +50,7 @@ async function withRetry(fn: () => Promise<string>, tries = 3): Promise<string> 
 }
 
 /** First balanced {...} object in a string (models sometimes add prose or a second object). */
-function firstJsonObject(text: string): string {
+export function firstJsonObject(text: string): string {
   const start = text.indexOf("{");
   let depth = 0, inStr = false, esc = false;
   for (let i = start; i >= 0 && i < text.length; i++) {
