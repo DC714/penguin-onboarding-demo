@@ -84,7 +84,7 @@ export function Demo() {
               <Text tt="uppercase" fz="xs" fw={600} c="#76b3b8" style={{ letterSpacing: 2, fontFamily: "var(--font-outfit)" }}>
                 Forward deployed engineering demo · synthetic data
               </Text>
-              <Title order={1} fz={{ base: 28, sm: 38 }} c="white">Onboarding a payer onto GwenOS</Title>
+              <Title order={1} fz={{ base: 28, sm: 38 }} c="white">Onboarding a Payer</Title>
               <Text c="#b5c0c7" maw={680}>
                 Northwind Health Plan (fictional) sends messy eligibility, provider, and claims data. Watch it get validated,
                 de-duplicated, and used to decide prior authorizations with a full audit trail.
