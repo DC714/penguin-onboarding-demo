@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   Accordion, Alert, Badge, Box, Button, Card, Code, Container, Group, List, Loader, Paper, ScrollArea,
-  SimpleGrid, Stack, Table, Tabs, Text, ThemeIcon, Title,
+  SegmentedControl, SimpleGrid, Stack, Table, Tabs, Text, ThemeIcon, Title,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import {
@@ -17,6 +17,7 @@ type State = {
   runs: Row[]; issues: Row[]; members: Row[]; links: Row[]; providers: Row[]; requests: Row[]; decisions: Row[];
   policy: { id: string; title: string; criteria: { id: string; label: string }[] };
   sources: { fhir: string; hl7: string; csv: string };
+  model: { available: boolean; name: string };
 };
 
 const STEPS = [
@@ -32,8 +33,8 @@ const OUTCOME = {
   REQUEST_INFO: { color: "gwen", label: "Info requested" },
 } as const;
 
-async function call(step: string) {
-  const res = await fetch("/api/pipeline", { method: "POST", body: JSON.stringify({ step }) });
+async function call(step: string, engine?: string) {
+  const res = await fetch("/api/pipeline", { method: "POST", body: JSON.stringify({ step, engine }) });
   const json = await res.json();
   if (!res.ok) throw new Error(json.error ?? "request failed");
   return json.stats as Record<string, number>;
@@ -43,6 +44,7 @@ export function Demo() {
   const [state, setState] = useState<State | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [tab, setTab] = useState<string | null>("sources");
+  const [engine, setEngine] = useState<"rules" | "model">("rules");
 
   const refresh = useCallback(async () => {
     setState(await (await fetch("/api/state", { cache: "no-store" })).json());
@@ -55,7 +57,7 @@ export function Demo() {
     try {
       for (const s of steps) {
         setBusy(s);
-        const stats = await call(s);
+        const stats = await call(s, engine);
         notifications.show({ title: s === "fix" ? "Provider directory fix applied" : `${s[0].toUpperCase()}${s.slice(1)} complete`, message: Object.entries(stats).map(([k, v]) => `${k}: ${v}`).join(" · "), color: "gwen" });
       }
       await refresh();
@@ -134,7 +136,7 @@ export function Demo() {
               <Tabs.Panel value="sources" pt="md"><Sources state={state} ran={ran} busy={busy} run={run} /></Tabs.Panel>
               <Tabs.Panel value="validate" pt="md"><Validate state={state} ran={ran} busy={busy} run={run} /></Tabs.Panel>
               <Tabs.Panel value="resolve" pt="md"><Resolve state={state} ran={ran} busy={busy} run={run} /></Tabs.Panel>
-              <Tabs.Panel value="auth" pt="md"><Auth state={state} ran={ran} busy={busy} run={run} /></Tabs.Panel>
+              <Tabs.Panel value="auth" pt="md"><Auth state={state} ran={ran} busy={busy} run={run} engine={engine} setEngine={setEngine} /></Tabs.Panel>
               <Tabs.Panel value="sql" pt="md"><Sql ready={ran.has("resolve")} /></Tabs.Panel>
             </Tabs>
           </Stack>
@@ -288,14 +290,21 @@ const STATUS_ICON = {
   missing: <ThemeIcon color="gwen" size="sm" radius="xl"><IconAlertTriangle size={12} /></ThemeIcon>,
 } as const;
 
-function Auth({ state, ran, busy, run }: PanelProps) {
+function Auth({ state, ran, busy, run, engine, setEngine }: PanelProps & { engine: "rules" | "model"; setEngine: (e: "rules" | "model") => void }) {
   const counts = (o: string) => state.decisions.filter((d) => d.outcome === o).length;
   const total = state.decisions.length;
   return (
     <Section
       title="Prior authorization with a Glassbox-style audit trail"
       hint={`Policy ${state.policy.id}: ${state.policy.title}. Each criterion is checked against the note and the member's claims history in Postgres. Only a clean pass is approved; anything else goes to a human with the evidence attached.`}
-      action={<Button leftSection={<IconStethoscope size={16} />} loading={busy === "authorize"} disabled={!!busy || !ran.has("resolve")} onClick={() => run(["authorize"])}>Decide requests</Button>}
+      action={
+        <Stack gap={6} align="flex-end">
+          <SegmentedControl size="xs" value={engine} onChange={(v) => setEngine(v as "rules" | "model")}
+            data={[{ label: "Rules engine", value: "rules" }, { label: `${state.model.name} (open model)`, value: "model", disabled: !state.model.available }]} />
+          <Button leftSection={<IconStethoscope size={16} />} loading={busy === "authorize"} disabled={!!busy || !ran.has("resolve")} onClick={() => run(["authorize"])}>Decide requests</Button>
+          {!state.model.available && <Text fz="xs" c="dimmed">Model step off: GEMMA_API_KEY not set.</Text>}
+        </Stack>
+      }
     >
       {!ran.has("authorize") ? <Empty text="Resolve entities first, then decide the six pending MRI requests." /> : (
         <>
@@ -323,6 +332,7 @@ function Auth({ state, ran, busy, run }: PanelProps) {
                   <Accordion.Panel>
                     <Stack gap="sm">
                       <Text fz="sm">{d.summary}</Text>
+                      <Text fz="xs" c="dimmed">Engine: {d.audit.engine}</Text>
                       <Table verticalSpacing="xs">
                         <Table.Tbody>
                           {d.audit.criteria.map((c: Row) => (

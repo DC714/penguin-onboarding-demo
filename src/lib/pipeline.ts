@@ -1,6 +1,7 @@
 import { distance } from "fastest-levenshtein";
 import { q, SCHEMA } from "@/lib/db";
 import { isValidNpi } from "@/lib/npi";
+import { assessNote, MODEL, modelAvailable, type NoteStatus } from "@/lib/llm";
 import { CLAIMS_CSV, FHIR_BUNDLE, HL7_MESSAGES, NPI_DIRECTORY, POLICY } from "@/data/fixtures";
 
 /* ---------- types ---------- */
@@ -307,11 +308,13 @@ function evalC2(note: string): Criterion {
     : { ...base, status: "not_met", evidence: "No objective neurological deficit documented. Note states a normal neuro exam." };
 }
 
-export async function authorize() {
+export async function authorize(engine: "rules" | "model" = "rules") {
   await q(`DELETE FROM auth_decisions`);
   const reqs = await q<Json>(`SELECT * FROM auth_requests ORDER BY auth_id`);
+  const assessments = engine === "model" ? await Promise.all(reqs.map((r) => assessNote(r.note))) : [];
+  let fallbacks = 0;
   const out: Json[] = [];
-  for (const r of reqs) {
+  for (const [idx, r] of reqs.entries()) {
     const c3rows = r.member_key
       ? await q<Json>(
           `SELECT claim_id, cpt, to_char(service_date, 'YYYY-MM-DD') AS service_date FROM claims WHERE member_key = $1 AND cpt = ANY($2) AND service_date > now() - interval '12 months'`,
@@ -333,7 +336,18 @@ export async function authorize() {
       status: npiStatus,
       evidence: npiStatus === "met" ? `${r.provider_name}, NPI ${r.npi} passes check digit.` : `${r.provider_name}: NPI ${r.npi || "(blank)"} is ${r.npi ? "invalid" : "missing"}. Fix provider onboarding data first.`,
     };
-    const criteria = [evalC1(r.note), evalC2(r.note), c3, c4];
+    let c1 = evalC1(r.note), c2 = evalC2(r.note);
+    let usedModel = false;
+    const a = assessments[idx];
+    if (engine === "model") {
+      if (a) {
+        usedModel = true;
+        const ev = (x: { status: NoteStatus; quote: string }, why: string) => (x.quote ? `"${x.quote}"` : why);
+        c1 = { ...c1, status: a.c1.status, evidence: ev(a.c1, "Note does not address conservative therapy.") };
+        c2 = { ...c2, status: a.c2.status, evidence: ev(a.c2, "Note does not document a neurological finding.") };
+      } else fallbacks++;
+    }
+    const criteria = [c1, c2, c3, c4];
     const anyMissing = criteria.some((c) => c.status === "missing" || (c.id === "C4" && c.status !== "met"));
     const allMet = criteria.every((c) => c.status === "met");
     const outcome = allMet ? "AUTO_APPROVE" : anyMissing ? "REQUEST_INFO" : "HUMAN_REVIEW";
@@ -346,11 +360,12 @@ export async function authorize() {
           : `Criteria not clearly met (${failing}). Routed to a clinical reviewer with the evidence below. Only humans can deny.`;
     const audit = {
       policy: `${POLICY.id} · ${POLICY.title}`,
+      engine: usedModel ? `${MODEL} (open-weight) read the note; code verified every quote` : "deterministic rules engine" + (engine === "model" ? " (model unavailable, fell back)" : ""),
       criteria,
       steps: [
         { actor: "Intake", detail: `Request ${r.auth_id} received for CPT ${r.cpt} / ${r.icd10}.` },
         { actor: "Data layer", detail: r.member_key ? `Resolved to golden member ${r.member_key}.` : "Member could not be resolved." },
-        { actor: "Rules engine", detail: `Evaluated ${criteria.length} criteria from ${POLICY.id}.` },
+        { actor: usedModel ? "Gemma + verifier" : "Rules engine", detail: `Evaluated ${criteria.length} criteria from ${POLICY.id}.` },
         { actor: outcome === "HUMAN_REVIEW" ? "Reviewer queue" : "Decision", detail: summary },
       ],
     };
@@ -366,8 +381,9 @@ export async function authorize() {
     "Human review": out.filter((o) => o.outcome === "HUMAN_REVIEW").length,
     "Info requested": out.filter((o) => o.outcome === "REQUEST_INFO").length,
   };
-  await record("authorize", stats);
-  return stats;
+  const withEngine = engine === "model" ? { ...stats, [`${MODEL}`]: out.length - fallbacks, "Rules fallbacks": fallbacks } : stats;
+  await record("authorize", withEngine);
+  return withEngine;
 }
 
 /* ---------- read model ---------- */
@@ -396,5 +412,5 @@ export async function state() {
     hl7: HL7_MESSAGES.map((m) => m.replace(/\r/g, "\n")).join("\n\n"),
     csv: CLAIMS_CSV,
   };
-  return { runs, issues, members, links, providers, requests, decisions, policy: POLICY, sources };
+  return { runs, issues, members, links, providers, requests, decisions, policy: POLICY, sources, model: { available: modelAvailable(), name: MODEL } };
 }
