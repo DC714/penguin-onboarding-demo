@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { BarChart } from "@mantine/charts";
 import { Alert, Badge, Box, Button, Card, Checkbox, Group, Loader, Select, SimpleGrid, Slider, Stack, Table, Text, Title } from "@mantine/core";
 import { IconArrowRight, IconSparkles } from "@tabler/icons-react";
 import { DEFAULT_CONFIG, generatePlan, LABELS, type PlanConfig } from "@/lib/plan";
@@ -52,22 +53,24 @@ export function PlanTab({ goToProof }: { goToProof: () => void }) {
 
       <Card>
         <Text ff="var(--font-outfit)" fw={600} mb="sm">Timeline</Text>
-        <Box style={{ display: "grid", gridTemplateColumns: `210px repeat(${cfg.weeks}, 1fr)`, gap: 4, alignItems: "center" }}>
-          <Box />
-          {Array.from({ length: cfg.weeks }, (_, i) => <Text key={i} fz="xs" c="dimmed" ta="center">W{i + 1}</Text>)}
-          {plan.phases.map((p, i) => (
-            <Box key={p.name} style={{ display: "contents" }}>
-              <Text fz="sm" fw={500} lh={1.2} style={{ gridColumn: 1, gridRow: i + 2 }}>{p.name}</Text>
-              <Box style={{ gridRow: i + 2, gridColumn: `${p.start + 1} / span ${p.weeks}`, background: PHASE_COLORS[i], borderRadius: 6, color: "white", padding: "4px 8px", fontSize: 12, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={p.outcome}>
-                Day {(p.start - 1) * 7 + 1}–{(p.start - 1 + p.weeks) * 7}
-              </Box>
-            </Box>
-          ))}
-        </Box>
-        <Text fz="xs" c="dimmed" mt="sm">Hover a bar for the phase outcome. Owner for every phase: the forward deployed engineer plus the customer-side role named below.</Text>
+        <BarChart
+          h={290}
+          data={plan.phases.map((p) => ({ phase: p.name, offset: (p.start - 1) * 7, [p.name]: p.weeks * 7 }))}
+          dataKey="phase"
+          orientation="vertical"
+          type="stacked"
+          withLegend={false}
+          withTooltip={false}
+          gridAxis="x"
+          xAxisProps={{ type: "number", domain: [0, days], tickCount: Math.min(cfg.weeks + 1, 13), unit: "d" }}
+          yAxisProps={{ width: 200 }}
+          series={[{ name: "offset", color: "transparent" }, ...plan.phases.map((p, i) => ({ name: p.name, color: PHASE_COLORS[i] }))]}
+          barProps={{ radius: 4 }}
+        />
+        <Text fz="xs" c="dimmed" mt="sm">Bars show each phase on a day scale. Every phase is owned by the forward deployed engineer plus the customer-side role named below.</Text>
         <Table mt="sm" verticalSpacing="xs" fz="sm">
           <Table.Tbody>{plan.phases.map((p) => (
-            <Table.Tr key={p.name}><Table.Td fw={500}>{p.name}</Table.Td><Table.Td c="dimmed">{p.owner}</Table.Td><Table.Td>{p.outcome}</Table.Td></Table.Tr>
+            <Table.Tr key={p.name}><Table.Td fw={500}>{p.name}</Table.Td><Table.Td c="dimmed" style={{ whiteSpace: "nowrap" }}>Day {(p.start - 1) * 7 + 1}–{(p.start - 1 + p.weeks) * 7}</Table.Td><Table.Td c="dimmed">{p.owner}</Table.Td><Table.Td>{p.outcome}</Table.Td></Table.Tr>
           ))}</Table.Tbody>
         </Table>
       </Card>
