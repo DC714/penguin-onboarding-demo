@@ -1,14 +1,45 @@
 /**
- * Optional open-weight model step (Gemma via the Google AI Studio API).
- * The model only reads the unstructured clinical note. Anything it returns is
- * verified in code (allowed status, quote must appear verbatim in the note);
- * on any failure the caller falls back to the deterministic rules engine.
+ * Optional open-weight model step. The model only reads the unstructured clinical
+ * note. Anything it returns is verified in code (allowed status, quote must appear
+ * verbatim in the note); on any failure the caller falls back to the rules engine.
  */
 export type NoteStatus = "met" | "not_met" | "ambiguous";
 export type NoteAssessment = { c1: { status: NoteStatus; quote: string }; c2: { status: NoteStatus; quote: string } };
+export type ProviderId = "gemma" | "mistral";
+export type Attempt = { result: NoteAssessment | null; error?: string; ms: number };
 
-export const MODEL = process.env.GEMMA_MODEL ?? "gemma-3-27b-it";
-export const modelAvailable = () => Boolean(process.env.GEMMA_API_KEY);
+type Provider = { id: ProviderId; label: string; model: string; key: string | undefined; call: (prompt: string, model: string, key: string) => Promise<string> };
+
+const gemmaCall: Provider["call"] = async (prompt, model, key) => {
+  // Gemma on the Gemini API has no system-prompt or JSON-mode support, so everything rides in the user turn.
+  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+    body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: prompt }] }], generationConfig: { temperature: 0 } }),
+    signal: AbortSignal.timeout(30000),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}: ${(await res.text()).slice(0, 160)}`);
+  const data = await res.json();
+  return data?.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text ?? "").join("") ?? "";
+};
+
+const mistralCall: Provider["call"] = async (prompt, model, key) => {
+  const res = await fetch("https://api.mistral.ai/v1/chat/completions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+    body: JSON.stringify({ model, temperature: 0, response_format: { type: "json_object" }, messages: [{ role: "user", content: prompt }] }),
+    signal: AbortSignal.timeout(30000),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}: ${(await res.text()).slice(0, 160)}`);
+  return (await res.json())?.choices?.[0]?.message?.content ?? "";
+};
+
+export const PROVIDERS: Record<ProviderId, Provider> = {
+  gemma: { id: "gemma", label: "Gemma", model: process.env.GEMMA_MODEL ?? "gemma-3-27b-it", key: process.env.GEMMA_API_KEY, call: gemmaCall },
+  mistral: { id: "mistral", label: "Mistral", model: process.env.MISTRAL_MODEL ?? "mistral-small-latest", key: process.env.MISTRAL_API_KEY, call: mistralCall },
+};
+
+export const availableProviders = () => (Object.values(PROVIDERS)).map((p) => ({ id: p.id, name: p.model, label: p.label, available: Boolean(p.key) }));
 
 const PROMPT = (note: string) => `You are a utilization-review assistant reading ONE clinical note against two policy criteria.
 
@@ -29,29 +60,24 @@ NOTE:
 
 const norm = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
 
-export async function assessNote(note: string): Promise<NoteAssessment | null> {
-  const key = process.env.GEMMA_API_KEY;
-  if (!key || !note) return null;
+export async function tryAssess(note: string, id: ProviderId): Promise<Attempt> {
+  const p = PROVIDERS[id];
+  const t0 = Date.now();
+  if (!p.key || !note) return { result: null, error: "no key or empty note", ms: 0 };
   try {
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-goog-api-key": key },
-      body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: PROMPT(note) }] }], generationConfig: { temperature: 0 } }),
-      signal: AbortSignal.timeout(25000),
-    });
-    if (!res.ok) return null;
-    const data = await res.json();
-    const text: string = data?.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text ?? "").join("") ?? "";
+    const text = await p.call(PROMPT(note), p.model, p.key);
     const json = JSON.parse(text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1));
     const out = {} as NoteAssessment;
     for (const k of ["c1", "c2"] as const) {
       const { status, quote } = json[k] ?? {};
-      if (!["met", "not_met", "ambiguous"].includes(status) || typeof quote !== "string") return null;
-      if (quote && !norm(note).includes(norm(quote))) return null; // hallucinated evidence: reject whole answer
+      if (!["met", "not_met", "ambiguous"].includes(status) || typeof quote !== "string") throw new Error("bad schema");
+      if (quote && !norm(note).includes(norm(quote))) throw new Error("quote not found in note (hallucinated evidence)");
       out[k] = { status, quote };
     }
-    return out;
-  } catch {
-    return null;
+    return { result: out, ms: Date.now() - t0 };
+  } catch (e) {
+    return { result: null, error: String(e instanceof Error ? e.message : e), ms: Date.now() - t0 };
   }
 }
+
+export const assessNote = async (note: string, id: ProviderId) => (await tryAssess(note, id)).result;

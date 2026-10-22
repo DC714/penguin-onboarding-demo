@@ -17,7 +17,7 @@ type State = {
   runs: Row[]; issues: Row[]; members: Row[]; links: Row[]; providers: Row[]; requests: Row[]; decisions: Row[];
   policy: { id: string; title: string; criteria: { id: string; label: string }[] };
   sources: { fhir: string; hl7: string; csv: string };
-  model: { available: boolean; name: string };
+  models: { id: string; name: string; label: string; available: boolean }[];
 };
 
 const STEPS = [
@@ -44,7 +44,7 @@ export function Demo() {
   const [state, setState] = useState<State | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [tab, setTab] = useState<string | null>("sources");
-  const [engine, setEngine] = useState<"rules" | "model">("rules");
+  const [engine, setEngine] = useState<string>("rules");
 
   const refresh = useCallback(async () => {
     setState(await (await fetch("/api/state", { cache: "no-store" })).json());
@@ -290,7 +290,7 @@ const STATUS_ICON = {
   missing: <ThemeIcon color="gwen" size="sm" radius="xl"><IconAlertTriangle size={12} /></ThemeIcon>,
 } as const;
 
-function Auth({ state, ran, busy, run, engine, setEngine }: PanelProps & { engine: "rules" | "model"; setEngine: (e: "rules" | "model") => void }) {
+function Auth({ state, ran, busy, run, engine, setEngine }: PanelProps & { engine: string; setEngine: (e: string) => void }) {
   const counts = (o: string) => state.decisions.filter((d) => d.outcome === o).length;
   const total = state.decisions.length;
   return (
@@ -299,10 +299,10 @@ function Auth({ state, ran, busy, run, engine, setEngine }: PanelProps & { engin
       hint={`Policy ${state.policy.id}: ${state.policy.title}. Each criterion is checked against the note and the member's claims history in Postgres. Only a clean pass is approved; anything else goes to a human with the evidence attached.`}
       action={
         <Stack gap={6} align="flex-end">
-          <SegmentedControl size="xs" value={engine} onChange={(v) => setEngine(v as "rules" | "model")}
-            data={[{ label: "Rules engine", value: "rules" }, { label: `${state.model.name} (open model)`, value: "model", disabled: !state.model.available }]} />
+          <SegmentedControl size="xs" value={engine} onChange={setEngine}
+            data={[{ label: "Rules engine", value: "rules" }, ...state.models.map((m) => ({ label: `${m.label} · ${m.name}`, value: m.id, disabled: !m.available }))]} />
           <Button leftSection={<IconStethoscope size={16} />} loading={busy === "authorize"} disabled={!!busy || !ran.has("resolve")} onClick={() => run(["authorize"])}>Decide requests</Button>
-          {!state.model.available && <Text fz="xs" c="dimmed">Model step off: GEMMA_API_KEY not set.</Text>}
+          {state.models.some((m) => !m.available) && <Text fz="xs" c="dimmed">Greyed-out models have no API key set.</Text>}
         </Stack>
       }
     >

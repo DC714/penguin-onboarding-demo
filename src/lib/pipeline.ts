@@ -1,7 +1,7 @@
 import { distance } from "fastest-levenshtein";
 import { q, SCHEMA } from "@/lib/db";
 import { isValidNpi } from "@/lib/npi";
-import { assessNote, MODEL, modelAvailable, type NoteStatus } from "@/lib/llm";
+import { assessNote, availableProviders, PROVIDERS, type NoteStatus, type ProviderId } from "@/lib/llm";
 import { CLAIMS_CSV, FHIR_BUNDLE, HL7_MESSAGES, NPI_DIRECTORY, POLICY } from "@/data/fixtures";
 
 /* ---------- types ---------- */
@@ -286,7 +286,7 @@ const sentences = (t: string) => t.split(/(?<=\.)\s+/).filter(Boolean);
 const THERAPY = /physical therapy|\bPT\b|NSAID|ibuprofen|conservative|medication/i;
 const NEURO = /radiculopathy|radicular|weakness|numbness|strength\s+[0-4]\/5|foot drop|(diminished|decreased|absent)\s+[\w\s]*reflex/i;
 
-function evalC1(note: string): Criterion {
+export function evalC1(note: string): Criterion {
   const base = { id: "C1", label: POLICY.criteria[0].label };
   if (!note) return { ...base, status: "missing", evidence: "No clinical note attached." };
   const hits = sentences(note).filter((s) => THERAPY.test(s));
@@ -298,7 +298,7 @@ function evalC1(note: string): Criterion {
   return { ...base, status: Math.max(...weeks) >= 6 ? "met" : "not_met", evidence: `"${quote}"` };
 }
 
-function evalC2(note: string): Criterion {
+export function evalC2(note: string): Criterion {
   const base = { id: "C2", label: POLICY.criteria[1].label };
   if (!note) return { ...base, status: "missing", evidence: "No clinical note attached." };
   const withNeuro = sentences(note).filter((s) => NEURO.test(s));
@@ -308,10 +308,13 @@ function evalC2(note: string): Criterion {
     : { ...base, status: "not_met", evidence: "No objective neurological deficit documented. Note states a normal neuro exam." };
 }
 
-export async function authorize(engine: "rules" | "model" = "rules") {
+export type Engine = "rules" | ProviderId;
+
+export async function authorize(engine: Engine = "rules") {
   await q(`DELETE FROM auth_decisions`);
   const reqs = await q<Json>(`SELECT * FROM auth_requests ORDER BY auth_id`);
-  const assessments = engine === "model" ? await Promise.all(reqs.map((r) => assessNote(r.note))) : [];
+  const assessments = engine !== "rules" ? await Promise.all(reqs.map((r) => assessNote(r.note, engine))) : [];
+  const modelName = engine === "rules" ? "" : PROVIDERS[engine].model;
   let fallbacks = 0;
   const out: Json[] = [];
   for (const [idx, r] of reqs.entries()) {
@@ -339,7 +342,7 @@ export async function authorize(engine: "rules" | "model" = "rules") {
     let c1 = evalC1(r.note), c2 = evalC2(r.note);
     let usedModel = false;
     const a = assessments[idx];
-    if (engine === "model") {
+    if (engine !== "rules") {
       if (a) {
         usedModel = true;
         const ev = (x: { status: NoteStatus; quote: string }, why: string) => (x.quote ? `"${x.quote}"` : why);
@@ -360,12 +363,12 @@ export async function authorize(engine: "rules" | "model" = "rules") {
           : `Criteria not clearly met (${failing}). Routed to a clinical reviewer with the evidence below. Only humans can deny.`;
     const audit = {
       policy: `${POLICY.id} · ${POLICY.title}`,
-      engine: usedModel ? `${MODEL} (open-weight) read the note; code verified every quote` : "deterministic rules engine" + (engine === "model" ? " (model unavailable, fell back)" : ""),
+      engine: usedModel ? `${modelName} (open-weight) read the note; code verified every quote` : "deterministic rules engine" + (engine !== "rules" ? ` (${modelName} unavailable or failed verification, fell back)` : ""),
       criteria,
       steps: [
         { actor: "Intake", detail: `Request ${r.auth_id} received for CPT ${r.cpt} / ${r.icd10}.` },
         { actor: "Data layer", detail: r.member_key ? `Resolved to golden member ${r.member_key}.` : "Member could not be resolved." },
-        { actor: usedModel ? "Gemma + verifier" : "Rules engine", detail: `Evaluated ${criteria.length} criteria from ${POLICY.id}.` },
+        { actor: usedModel ? `${PROVIDERS[engine as ProviderId].label} + verifier` : "Rules engine", detail: `Evaluated ${criteria.length} criteria from ${POLICY.id}.` },
         { actor: outcome === "HUMAN_REVIEW" ? "Reviewer queue" : "Decision", detail: summary },
       ],
     };
@@ -381,7 +384,7 @@ export async function authorize(engine: "rules" | "model" = "rules") {
     "Human review": out.filter((o) => o.outcome === "HUMAN_REVIEW").length,
     "Info requested": out.filter((o) => o.outcome === "REQUEST_INFO").length,
   };
-  const withEngine = engine === "model" ? { ...stats, [`${MODEL}`]: out.length - fallbacks, "Rules fallbacks": fallbacks } : stats;
+  const withEngine = engine !== "rules" ? { ...stats, [modelName]: out.length - fallbacks, "Rules fallbacks": fallbacks } : stats;
   await record("authorize", withEngine);
   return withEngine;
 }
@@ -412,5 +415,5 @@ export async function state() {
     hl7: HL7_MESSAGES.map((m) => m.replace(/\r/g, "\n")).join("\n\n"),
     csv: CLAIMS_CSV,
   };
-  return { runs, issues, members, links, providers, requests, decisions, policy: POLICY, sources, model: { available: modelAvailable(), name: MODEL } };
+  return { runs, issues, members, links, providers, requests, decisions, policy: POLICY, sources, models: availableProviders() };
 }
