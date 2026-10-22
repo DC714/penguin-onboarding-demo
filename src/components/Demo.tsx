@@ -6,9 +6,10 @@ import {
   SegmentedControl, SimpleGrid, Stack, Table, Tabs, Text, ThemeIcon, Title,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
+import { PlanTab } from "@/components/PlanTab";
 import {
   IconAlertTriangle, IconCheck, IconDatabase, IconFileImport, IconGitMerge, IconPlayerPlay, IconRefresh,
-  IconShieldCheck, IconStethoscope, IconX, IconHelp, IconUserCheck,
+  IconListCheck, IconShieldCheck, IconStethoscope, IconX, IconHelp, IconUserCheck,
 } from "@tabler/icons-react";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -43,7 +44,7 @@ async function call(step: string, engine?: string) {
 export function Demo() {
   const [state, setState] = useState<State | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const [tab, setTab] = useState<string | null>("sources");
+  const [tab, setTab] = useState<string | null>("plan");
   const [engine, setEngine] = useState<string>("rules");
 
   const refresh = useCallback(async () => {
@@ -126,6 +127,7 @@ export function Demo() {
 
             <Tabs value={tab} onChange={setTab} color="gwen" keepMounted={false}>
               <Tabs.List>
+                <Tabs.Tab value="plan" leftSection={<IconListCheck size={16} />}>Onboarding plan</Tabs.Tab>
                 <Tabs.Tab value="sources" leftSection={<IconFileImport size={16} />}>1 · Sources</Tabs.Tab>
                 <Tabs.Tab value="validate" leftSection={<IconShieldCheck size={16} />}>2 · Validate</Tabs.Tab>
                 <Tabs.Tab value="resolve" leftSection={<IconGitMerge size={16} />}>3 · Resolve</Tabs.Tab>
@@ -133,6 +135,7 @@ export function Demo() {
                 <Tabs.Tab value="sql" leftSection={<IconDatabase size={16} />}>SQL</Tabs.Tab>
               </Tabs.List>
 
+              <Tabs.Panel value="plan" pt="md"><PlanTab goToProof={() => setTab("sources")} /></Tabs.Panel>
               <Tabs.Panel value="sources" pt="md"><Sources state={state} ran={ran} busy={busy} run={run} /></Tabs.Panel>
               <Tabs.Panel value="validate" pt="md"><Validate state={state} ran={ran} busy={busy} run={run} /></Tabs.Panel>
               <Tabs.Panel value="resolve" pt="md"><Resolve state={state} ran={ran} busy={busy} run={run} /></Tabs.Panel>

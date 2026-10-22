@@ -112,3 +112,15 @@ export async function tryAssess(note: string, id: ProviderId): Promise<Attempt> 
 }
 
 export const assessNote = async (note: string, id: ProviderId) => (await tryAssess(note, id)).result;
+
+/** Free-text generation (used for the kickoff summary). Returns null if the model is unavailable. */
+export async function draftText(prompt: string, id: ProviderId = "gemma"): Promise<string | null> {
+  const p = PROVIDERS[id];
+  if (!p.key) return null;
+  try {
+    const text = (await withRetry(() => p.call(prompt, p.model, p.key!))).trim();
+    return text || null;
+  } catch {
+    return null;
+  }
+}
