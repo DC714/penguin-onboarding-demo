@@ -1,36 +1,30 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Payer onboarding demo: prior auth on GwenOS (synthetic data)
 
-## Getting Started
+An interview demo for a Forward Deployed Engineer role at Penguin Ai. It shows how a new payer customer would be onboarded:
+messy source data in, validated and de-duplicated records in Postgres, then prior-authorization decisions with a per-criterion audit trail.
 
-First, run the development server:
+Everything is synthetic. "Northwind Health Plan" is fictional. This is an unofficial demo, not affiliated with Penguin Ai's production systems,
+and the "AI worker" is a deterministic criteria engine that simulates where a model would sit.
 
+## The flow
+1. **Ingest**: a FHIR R4 bundle (Patient, Practitioner, ServiceRequest, DocumentReference), HL7 v2 ADT^A08 messages, and a claims CSV.
+2. **Validate**: NPI Luhn check digit, ICD-10 format, CPT/diagnosis consistency, orphaned members, missing member IDs.
+3. **Resolve**: entity resolution across sources (nicknames, punctuation, missing IDs). Same name with a different DOB is kept separate.
+4. **Prior auth**: policy `NHP-IMG-014` (lumbar MRI) has four criteria. A clean pass auto-approves; anything else routes to a human or back to the provider.
+   "Apply directory fix" repairs two provider NPIs and re-decides, turning 1 of 6 approvals into 3 of 6.
+5. **SQL**: allow-listed queries against the Neon tables.
+
+## Stack
+Next.js 16 (App Router) · Mantine 9 · Neon Postgres (`@neondatabase/serverless`) · TypeScript. Brand tokens (Outfit, Public Sans, pink `#fe017d`,
+teal `#05526d`, cream `#f9f7f2`) come from penguinai.co/gwenos.
+
+## Run locally
 ```bash
+npm install
+echo "DATABASE_URL=postgresql://..." > .env.local   # a Neon connection string
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
+`npx tsx scripts/smoke.ts` runs the whole pipeline headlessly (use `node --env-file=.env.local`).
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Deploy to Vercel
+Import the repo, add `DATABASE_URL` as an environment variable (or use the Neon integration), deploy. Open the app once before a demo to wake the free Neon database.

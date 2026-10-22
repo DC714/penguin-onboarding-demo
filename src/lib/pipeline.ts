@@ -300,7 +300,8 @@ function evalC1(note: string): Criterion {
 function evalC2(note: string): Criterion {
   const base = { id: "C2", label: POLICY.criteria[1].label };
   if (!note) return { ...base, status: "missing", evidence: "No clinical note attached." };
-  const hit = sentences(note).find((s) => NEURO.test(s));
+  const withNeuro = sentences(note).filter((s) => NEURO.test(s));
+  const hit = withNeuro.find((s) => /exam/i.test(s)) ?? withNeuro[0];
   return hit
     ? { ...base, status: "met", evidence: `"${hit}"` }
     : { ...base, status: "not_met", evidence: "No objective neurological deficit documented. Note states a normal neuro exam." };
@@ -313,7 +314,7 @@ export async function authorize() {
   for (const r of reqs) {
     const c3rows = r.member_key
       ? await q<Json>(
-          `SELECT claim_id, cpt, service_date FROM claims WHERE member_key = $1 AND cpt = ANY($2) AND service_date > now() - interval '12 months'`,
+          `SELECT claim_id, cpt, to_char(service_date, 'YYYY-MM-DD') AS service_date FROM claims WHERE member_key = $1 AND cpt = ANY($2) AND service_date > now() - interval '12 months'`,
           [r.member_key, [...IMAGING_CPT]],
         )
       : [];
