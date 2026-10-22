@@ -15,7 +15,7 @@ const gemmaCall: Provider["call"] = async (prompt, model, key) => {
   const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "x-goog-api-key": key },
-    body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: prompt }] }], generationConfig: { temperature: 0 } }),
+    body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: prompt }] }], generationConfig: { temperature: 0, thinkingConfig: { thinkingLevel: process.env.GEMMA_THINKING ?? "minimal" } } }),
     signal: AbortSignal.timeout(30000),
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}: ${(await res.text()).slice(0, 160)}`);
