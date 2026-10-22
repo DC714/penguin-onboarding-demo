@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { authorize, type Engine, fixProviders, ingest, resolve, validate } from "@/lib/pipeline";
 
+// The model step makes parallel LLM calls that can take 10-20s.
+export const maxDuration = 60;
+
 const STEPS = { ingest, validate, resolve, authorize: (e?: Engine) => authorize(e), fix: fixProviders } as const;
 
 export async function POST(req: Request) {

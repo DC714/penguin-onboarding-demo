@@ -69,7 +69,8 @@ export const PROVIDERS: Record<ProviderId, Provider> = {
   mistral: { id: "mistral", label: "Mistral", model: process.env.MISTRAL_MODEL ?? "mistral-small-latest", key: process.env.MISTRAL_API_KEY, call: mistralCall },
 };
 
-export const availableProviders = () => (Object.values(PROVIDERS)).map((p) => ({ id: p.id, name: p.model, label: p.label, available: Boolean(p.key) }));
+// Only models with a configured key are offered in the UI (the 31B and Mistral entries stay available to the benchmark script).
+export const availableProviders = () => (Object.values(PROVIDERS)).filter((p) => p.id === "gemma").map((p) => ({ id: p.id, name: p.model, label: p.label, available: Boolean(p.key) }));
 
 const PROMPT = (note: string) => `You are a utilization-review assistant reading ONE clinical note against two policy criteria.
 
